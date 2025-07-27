@@ -1,0 +1,26 @@
+[project]
+name = "RAG-based-Medical-Chatbot-Langchain-LLM"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "ipykernel>=6.30.0",
+]
+
+[project.optional-dependencies]
+name = [
+    "flask>=3.1.1",
+    "ipykernel==6.30.0",
+    "langchain==0.3.26",
+    "langchain-community==0.3.26",
+    "langchain-openai==0.3.24",
+    "langchain-pinecone==0.2.8",
+    "pypdf==5.6.1",
+    "python-dotenv==1.1.0",
+    "rag-based-medical-chatbot-langchain-llm",
+    "sentence-transformers==4.1.0",
+]
+
+[tool.uv.sources]
+rag-based-medical-chatbot-langchain-llm = { workspace = true }
