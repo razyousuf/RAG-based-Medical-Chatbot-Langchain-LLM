@@ -16,6 +16,8 @@ new_structure = [
     f"{project_name}/utils/__init__.py",
     f"{project_name}/utils/exception.py",
     f"{project_name}/utils/logger.py",
+    f"{project_name}/config/__init__.py",
+    f"{project_name}/config/constants.py",
     f"{project_name}/data/__init__.py",
     f"{project_name}/notebook/research_notebook.py",
     f"{project_name}/templates/chatbot.html",
