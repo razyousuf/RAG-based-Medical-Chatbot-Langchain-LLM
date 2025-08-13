@@ -1,29 +1,17 @@
-# medi_chat/config/constants.py
 
-import os
-from dotenv import load_dotenv
+from dataclasses import dataclass
 
-load_dotenv()
-
-# Paths
-DATA_PATH = os.path.join("medi_chat", "data")  # Folder containing PDFs
-
-# Embedding and Pinecone
-INDEX_NAME = "medi-chat"
-EMBED_DIMENSION = 384
-EMBED_METRIC = "cosine"
-EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-PINECONE_CLOUD = "aws"
-PINECONE_REGION = "us-east-1"
-
-# API Keys (loaded from env in main scripts)
-PINECONE_API_KEY_ENV = "PINECONE_API_KEY"
-OPENAI_API_KEY_ENV = "OPENAI_API_KEY"
-
-# Retrieval
-RETRIEVAL_K = 3
-
-# Flask settings
-FLASK_HOST = "0.0.0.0"
-FLASK_PORT = 8080
-FLASK_DEBUG = True
+@dataclass(frozen=True)
+class AppConfig:
+    data_dir: str = "data/"
+    index_name: str = "medical-chatbot"
+    embed_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    chunk_size: int = 500
+    chunk_overlap: int = 20
+    pinecone_cloud: str = "aws"
+    pinecone_region: str = "us-east-1"
+    pinecone_metric: str = "cosine"
+    openai_model: str = "gpt-4o"
+    # Dimensions for the chosen embedding model.
+    # all-MiniLM-L6-v2 returns 384-d vectors.
+    embed_dimension: int = 384

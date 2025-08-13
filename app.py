@@ -1,103 +1,84 @@
-from flask import Flask, render_template, request, jsonify
-from dotenv import load_dotenv
+
 import os
+import sys
+import tempfile
+import streamlit as st
+from dotenv import load_dotenv
+from src.oop.config import AppConfig
+from src.oop.data_loader import PDFDataLoader
+from src.oop.processing import DocumentProcessor
+from src.oop.embeddings import EmbeddingsFactory
+from src.oop.indexer import PineconeIndexer
+from src.oop.rag import RAGPipeline
+from src.oop.prompts import SYSTEM_PROMPT
+from src.oop.logger import logger
+from src.oop.exception import AppException
 
-from medi_chat.helpers.index_store import IndexStore
-from medi_chat.utils.logger import logger
-from medi_chat.utils.exception import AppException
+def main():
+    load_dotenv()
+    cfg = AppConfig()
 
-from medi_chat.config.constants import (
-    DATA_PATH, INDEX_NAME, EMBED_DIMENSION, EMBED_MODEL
-)
+    st.set_page_config(page_title="Medical Chatbot", layout="centered")
+    st.title("🩺 Medical Chatbot (Streamlit)")
 
-# LangChain imports (adapt if you use different names/versions)
-from langchain_openai import ChatOpenAI
-from langchain.chains import RetrievalQA
+    # Sidebar Pinecone index viewer
+    with st.sidebar:
+        st.header("Pinecone Indexes")
+        try:
+            pinecone_api = os.environ.get("PINECONE_API_KEY")
+            if pinecone_api:
+                indexer_for_list = PineconeIndexer(api_key=pinecone_api)
+                st.write(indexer_for_list.pc.list_indexes())
+            else:
+                st.warning("Set PINECONE_API_KEY to view indexes")
+        except Exception as e:
+            st.error(str(e))
 
-load_dotenv()
+    # File uploader
+    uploaded_files = st.file_uploader("Drag & drop PDF(s) here", type="pdf", accept_multiple_files=True)
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
+    if uploaded_files and st.button("📚 Build/Update Index from Uploaded PDFs"):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for file in uploaded_files:
+                filepath = os.path.join(tmpdir, file.name)
+                with open(filepath, "wb") as f:
+                    f.write(file.getbuffer())
 
-# Configure index + LLM parameters via env or defaults
-DATA_PATH = DATA_PATH
-INDEX_NAME = INDEX_NAME
-EMBED_DIM = EMBED_DIMENSION
-LLM_MODEL = EMBED_MODEL
+            try:
+                loader = PDFDataLoader()
+                docs = loader.load(tmpdir)
 
-# Initialize IndexStore once (will connect to Pinecone client)
-try:
-    index_store = IndexStore(data_path=DATA_PATH, index_name=INDEX_NAME, embedding_dim=EMBED_DIM)
-    # Ensure index exists (create if needed). You can comment out create if you only read.
-    index_store.create_index_if_not_exists()
-    logger.info("IndexStore ready.")
-except Exception as e:
-    logger.exception("Failed to initialize IndexStore at startup")
-    index_store = None  # app will still run but endpoints should handle this
+                processor = DocumentProcessor(chunk_size=cfg.chunk_size, chunk_overlap=cfg.chunk_overlap)
+                minimal_docs = processor.filter_to_minimal_docs(docs)
+                chunks = processor.split(minimal_docs)
 
-# Initialize LLM (for retrieval QA)
-def get_llm():
-    # wrap model. Replace ChatOpenAI with your Gemini wrapper if you prefer.
-    return ChatOpenAI(model=LLM_MODEL, temperature=0)
+                embeddings = EmbeddingsFactory.huggingface(cfg.embed_model)
+                pinecone_api = os.environ.get("PINECONE_API_KEY")
+                indexer = PineconeIndexer(api_key=pinecone_api, cloud=cfg.pinecone_cloud, region=cfg.pinecone_region, metric=cfg.pinecone_metric)
+                indexer.ensure_index(cfg.index_name, dimension=cfg.embed_dimension)
+                indexer.index_from_documents(cfg.index_name, chunks, embeddings)
 
-@app.route("/")
-def home():
-    return render_template("chat.html")  # your front-end template
+                st.success(f"Indexed {len(chunks)} chunks into '{cfg.index_name}'")
+            except Exception as e:
+                st.error(str(AppException(e, sys)))
+                logger.error("Index build failed", exc_info=True)
 
-@app.route("/store", methods=["POST"])
-def store():
-    """Trigger document processing & upsert to Pinecone."""
-    try:
-        if not index_store:
-            raise AppException("IndexStore not initialized", __import__("sys"))
-        # optionally accept a body with {"data_path": "..."} to override
-        payload = request.get_json(silent=True) or {}
-        data_path = payload.get("data_path", None)
-        docs = None
-        if data_path:
-            docs = index_store.prepare_documents()
-        vector_store = index_store.upsert_documents(docs=docs)
-        return jsonify({"message": "Documents stored successfully", "index": INDEX_NAME}), 200
-    except AppException as ae:
-        logger.error(str(ae))
-        return jsonify({"error": str(ae)}), 500
-    except Exception as e:
-        logger.exception("Unexpected error during store")
-        return jsonify({"error": str(e)}), 500
+    # Chat interface
+    st.header("💬 Chat with your Medical Assistant")
+    user_input = st.text_input("Ask a question")
+    if st.button("Send") and user_input:
+        try:
+            embeddings = EmbeddingsFactory.huggingface(cfg.embed_model)
+            indexer = PineconeIndexer(cloud=cfg.pinecone_cloud, region=cfg.pinecone_region, metric=cfg.pinecone_metric)
+            vectorstore = indexer.index_from_existing(cfg.index_name, embeddings)
 
-@app.route("/query", methods=["POST"])
-def query():
-    """
-    Expects JSON: {"query": "your question", "k": 3}
-    Returns JSON with answer and sources (if available).
-    """
-    try:
-        if not index_store:
-            raise AppException("IndexStore not initialized", __import__("sys"))
-        payload = request.get_json()
-        if not payload or "query" not in payload:
-            return jsonify({"error": "Missing 'query' in request body"}), 400
+            rag = RAGPipeline(vectorstore, openai_model=cfg.openai_model, system_prompt=SYSTEM_PROMPT, k=3)
+            answer = rag.answer(user_input)
 
-        query_text = payload["query"]
-        k = int(payload.get("k", 3))
-
-        retriever = index_store.get_retriever(k=k)
-        llm = get_llm()
-
-        # Build a simple RetrievalQA chain. You can swap for a custom chain/prompt.
-        qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True)
-
-        result = qa_chain.run(query_text)
-        # If `run` returns a string (no sources), wrap accordingly. Some versions of LangChain return dicts.
-        response = {"answer": result}
-        return jsonify(response), 200
-
-    except AppException as ae:
-        logger.error(str(ae))
-        return jsonify({"error": str(ae)}), 500
-    except Exception as e:
-        logger.exception("Unexpected error during query")
-        return jsonify({"error": str(e)}), 500
+            st.markdown(f"**Answer:** {answer}")
+        except Exception as e:
+            st.error(str(AppException(e, sys)))
+            logger.error("Chat query failed", exc_info=True)
 
 if __name__ == "__main__":
-    # Use production WSGI (gunicorn) in production. Flask dev server for now.
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)), debug=os.getenv("FLASK_DEBUG", "True") == "True")
+    main()
