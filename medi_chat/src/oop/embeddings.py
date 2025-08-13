@@ -1,7 +1,7 @@
 
 from langchain.embeddings import HuggingFaceEmbeddings
-from src.oop.exception import AppException
-from src.oop.logger import logger
+from medi_chat.src.oop.exception import AppException
+from medi_chat.src.oop.logger import logger
 import sys
 
 class EmbeddingsFactory:

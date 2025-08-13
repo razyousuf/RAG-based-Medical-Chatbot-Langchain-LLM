@@ -2,8 +2,8 @@
 from typing import List
 from langchain.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain.schema import Document
-from src.oop.exception import AppException
-from src.oop.logger import logger
+from medi_chat.src.oop.exception import AppException
+from medi_chat.src.oop.logger import logger
 import sys
 
 class PDFDataLoader:
@@ -21,4 +21,4 @@ class PDFDataLoader:
             return docs
         except Exception as e:
             logger.error("Failed to load PDFs", exc_info=True)
-            raise AppException(e, sys)
+            raise AppException(e, sys) from sys

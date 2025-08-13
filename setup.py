@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 ## edit below variables as per your requirements -
 REPO_NAME = "RAG-based-Medical-Chatbot-Langchain-LLM"
 AUTHOR_USER_NAME = "Raz Yousufi"
-SRC_REPO = "medi_chat"
+SRC_REPO = "medi_chat/src"
 LIST_OF_REQUIREMENTS = []
 
 

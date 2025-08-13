@@ -4,22 +4,22 @@ import sys
 import tempfile
 import streamlit as st
 from dotenv import load_dotenv
-from src.oop.config import AppConfig
-from src.oop.data_loader import PDFDataLoader
-from src.oop.processing import DocumentProcessor
-from src.oop.embeddings import EmbeddingsFactory
-from src.oop.indexer import PineconeIndexer
-from src.oop.rag import RAGPipeline
-from src.oop.prompts import SYSTEM_PROMPT
-from src.oop.logger import logger
-from src.oop.exception import AppException
+from medi_chat.src.oop.config import AppConfig
+from medi_chat.src.oop.data_loader import PDFDataLoader
+from medi_chat.src.oop.processing import DocumentProcessor
+from medi_chat.src.oop.embeddings import EmbeddingsFactory
+from medi_chat.src.oop.indexer import PineconeIndexer
+from medi_chat.src.oop.rag import RAGPipeline
+from medi_chat.src.oop.prompts import SYSTEM_PROMPT
+from medi_chat.src.oop.logger import logger
+from medi_chat.src.oop.exception import AppException
 
 def main():
     load_dotenv()
     cfg = AppConfig()
 
     st.set_page_config(page_title="Medical Chatbot", layout="centered")
-    st.title("🩺 Medical Chatbot (Streamlit)")
+    st.title("🩺 Medical Chatbot")
 
     # Sidebar Pinecone index viewer
     with st.sidebar:

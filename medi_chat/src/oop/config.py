@@ -4,7 +4,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class AppConfig:
     data_dir: str = "data/"
-    index_name: str = "medical-chatbot"
+    index_name: str = "medi-chat"
     embed_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     chunk_size: int = 500
     chunk_overlap: int = 20

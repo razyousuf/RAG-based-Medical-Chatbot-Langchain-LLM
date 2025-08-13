@@ -2,8 +2,8 @@
 from typing import List
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
-from src.oop.exception import AppException
-from src.oop.logger import logger
+from medi_chat.src.oop.exception import AppException
+from medi_chat.src.oop.logger import logger
 import sys
 
 class DocumentProcessor:

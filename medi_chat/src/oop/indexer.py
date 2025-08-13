@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
 from langchain_pinecone import PineconeVectorStore
 from langchain.schema import Document
-from src.oop.exception import AppException
-from src.oop.logger import logger
+from medi_chat.src.oop.exception import AppException
+from medi_chat.src.oop.logger import logger
 import sys
 
 class PineconeIndexer:

@@ -4,8 +4,8 @@ from langchain_openai import ChatOpenAI
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
-from src.oop.exception import AppException
-from src.oop.logger import logger
+from medi_chat.src.oop.exception import AppException
+from medi_chat.src.oop.logger import logger
 import sys
 
 class RAGPipeline:
