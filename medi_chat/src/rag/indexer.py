@@ -3,15 +3,10 @@ import os
 from pinecone import Pinecone, ServerlessSpec
 from langchain_pinecone import PineconeVectorStore
 
-from src.helper import (
-    load_pdf_file,
-    filter_to_minimal_docs,
-    text_split,
-    download_hugging_face_embeddings,
-)
+from src.rag.helper import DocumentProcessor, EmbeddingLoader
 
-from logger import logger
-from exception import AppException
+from src.utils.logger import logger
+from src.utils.exception import AppException
 
 
 class MedicalIndexer:
@@ -23,10 +18,10 @@ class MedicalIndexer:
       4) Uploads embeddings to Pinecone
 
     Usage:
-        MedicalIndexer(data_dir="data/", index_name="medical-chatbot").run()
+        MedicalIndexer(data_dir="data/", index_name="medi-chat").run()
     """
 
-    def __init__(self, data_dir: str, index_name: str = "medical-chatbot"):
+    def __init__(self, data_dir: str, index_name: str = "medi-chat"):
         load_dotenv()
 
         self.data_dir = data_dir
@@ -49,7 +44,7 @@ class MedicalIndexer:
         try:
             logger.info("Initializing Pinecone and Embeddings clients")
             self._pc = Pinecone(api_key=self.pinecone_api_key)
-            self._embeddings = download_hugging_face_embeddings()
+            self._embeddings = EmbeddingLoader.load_embeddings()
             logger.info("Clients initialized successfully")
         except Exception as e:
             logger.exception("Failed to initialize clients")
@@ -74,11 +69,11 @@ class MedicalIndexer:
     def _prepare_documents(self):
         try:
             logger.info(f"Loading PDFs from: {self.data_dir}")
-            extracted = load_pdf_file(data=self.data_dir)
+            extracted = DocumentProcessor.load_pdfs(data=self.data_dir)
             logger.info(f"Loaded {len(extracted)} documents")
 
-            minimal = filter_to_minimal_docs(extracted)
-            chunks = text_split(minimal)
+            minimal = DocumentProcessor.filter_docs(extracted)
+            chunks = DocumentProcessor.split_docs(minimal)
             logger.info(f"Split into {len(chunks)} chunks")
             return chunks
         except Exception as e:

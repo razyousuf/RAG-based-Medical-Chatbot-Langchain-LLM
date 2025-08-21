@@ -6,8 +6,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
-from logger import logger
-from exception import AppException
+from src.utils.logger import logger
+from src.utils.exception import AppException
 import sys
 
 
