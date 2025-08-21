@@ -1,84 +1,111 @@
-
+# app.py
 import os
 import sys
-import tempfile
-import streamlit as st
+from flask import Flask, render_template, request
 from dotenv import load_dotenv
-from medi_chat.src.oop.config import AppConfig
-from medi_chat.src.oop.data_loader import PDFDataLoader
-from medi_chat.src.oop.processing import DocumentProcessor
-from medi_chat.src.oop.embeddings import EmbeddingsFactory
-from medi_chat.src.oop.indexer import PineconeIndexer
-from medi_chat.src.oop.rag import RAGPipeline
-from medi_chat.src.oop.prompts import SYSTEM_PROMPT
-from medi_chat.src.oop.logger import logger
-from medi_chat.src.oop.exception import AppException
 
-def main():
-    load_dotenv()
-    cfg = AppConfig()
+from medi_chat.src.rag.prompt import PromptRepository
+from medi_chat.src.rag.helper import EmbeddingLoader
 
-    st.set_page_config(page_title="Medical Chatbot", layout="centered")
-    st.title("🩺 Medical Chatbot")
+from medi_chat.src.utils.logger import logger
+from medi_chat.src.utils.exception import AppException
 
-    # Sidebar Pinecone index viewer
-    with st.sidebar:
-        st.header("Pinecone Indexes")
+from langchain_pinecone import PineconeVectorStore
+from langchain_openai import ChatOpenAI
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
+
+
+class MedicalChatbotWebApp:
+    """
+    Encapsulates the RAG wiring and Flask routes,
+    in a clean OOP style.
+    """
+
+    def __init__(self, index_name: str = "medi-chat"):
+        load_dotenv()
+        self.index_name = index_name
+
+        # Keep env handling identical
+        self.pinecone_api_key = os.environ.get("PINECONE_API_KEY")
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY")
+        os.environ["PINECONE_API_KEY"] = self.pinecone_api_key or ""
+        os.environ["OPENAI_API_KEY"] = self.openai_api_key or ""
+
+        # Flask
+        self.app = Flask(__name__)
+
+        # RAG pipeline objects
+        self.embeddings = None
+        self.docsearch = None
+        self.retriever = None
+        self.llm = None
+        self.prompt = None
+        self.qa_chain = None
+        self.rag_chain = None
+
+        # Build pipeline & routes
+        self._wire_rag_pipeline()
+        self._register_routes()
+
+    # ---------- Pipeline wiring ----------
+    def _wire_rag_pipeline(self):
         try:
-            pinecone_api = os.environ.get("PINECONE_API_KEY")
-            if pinecone_api:
-                indexer_for_list = PineconeIndexer(api_key=pinecone_api)
-                st.write(indexer_for_list.pc.list_indexes())
-            else:
-                st.warning("Set PINECONE_API_KEY to view indexes")
+            logger.info("Loading HuggingFace embeddings")
+            self.embeddings = EmbeddingLoader.load_embeddings()
+
+            logger.info(f"Connecting to existing Pinecone index '{self.index_name}'")
+            self.docsearch = PineconeVectorStore.from_existing_index(
+                index_name=self.index_name,
+                embedding=self.embeddings,
+            )
+
+            self.retriever = self.docsearch.as_retriever(
+                search_type="similarity",
+                search_kwargs={"k": 3},  # unchanged
+            )
+
+            logger.info("Initializing ChatOpenAI and chains")
+            self.llm = ChatOpenAI(model="gpt-4o")  # unchanged
+
+            self.prompt = ChatPromptTemplate.from_messages(
+                [("system", PromptRepository.get_system_prompt()), ("human", "{input}")]
+            )
+
+            self.qa_chain = create_stuff_documents_chain(self.llm, self.prompt)
+            self.rag_chain = create_retrieval_chain(self.retriever, self.qa_chain)
+
+            logger.info("RAG pipeline ready")
         except Exception as e:
-            st.error(str(e))
+            logger.exception("Failed to wire RAG pipeline")
+            raise AppException(e, sys)
 
-    # File uploader
-    uploaded_files = st.file_uploader("Drag & drop PDF(s) here", type="pdf", accept_multiple_files=True)
+    # ---------- Routes ----------
+    def _register_routes(self):
+        app = self.app
 
-    if uploaded_files and st.button("📚 Build/Update Index from Uploaded PDFs"):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            for file in uploaded_files:
-                filepath = os.path.join(tmpdir, file.name)
-                with open(filepath, "wb") as f:
-                    f.write(file.getbuffer())
+        @app.route("/")
+        def index():
+            return render_template("chat.html")
 
+        @app.route("/get", methods=["GET", "POST"])
+        def chat():
             try:
-                loader = PDFDataLoader()
-                docs = loader.load(tmpdir)
-
-                processor = DocumentProcessor(chunk_size=cfg.chunk_size, chunk_overlap=cfg.chunk_overlap)
-                minimal_docs = processor.filter_to_minimal_docs(docs)
-                chunks = processor.split(minimal_docs)
-
-                embeddings = EmbeddingsFactory.huggingface(cfg.embed_model)
-                pinecone_api = os.environ.get("PINECONE_API_KEY")
-                indexer = PineconeIndexer(api_key=pinecone_api, cloud=cfg.pinecone_cloud, region=cfg.pinecone_region, metric=cfg.pinecone_metric)
-                indexer.ensure_index(cfg.index_name, dimension=cfg.embed_dimension)
-                indexer.index_from_documents(cfg.index_name, chunks, embeddings)
-
-                st.success(f"Indexed {len(chunks)} chunks into '{cfg.index_name}'")
+                msg = request.form["msg"]
+                logger.info(f"User query: {msg}")
+                response = self.rag_chain.invoke({"input": msg})
+                answer = response["answer"]
+                logger.info(f"Model answer: {answer}")
+                return str(answer)
             except Exception as e:
-                st.error(str(AppException(e, sys)))
-                logger.error("Index build failed", exc_info=True)
+                logger.exception("Error during /get handling")
+                raise AppException(e, sys)
 
-    # Chat interface
-    st.header("💬 Chat with your Medical Assistant")
-    user_input = st.text_input("Ask a question")
-    if st.button("Send") and user_input:
-        try:
-            embeddings = EmbeddingsFactory.huggingface(cfg.embed_model)
-            indexer = PineconeIndexer(cloud=cfg.pinecone_cloud, region=cfg.pinecone_region, metric=cfg.pinecone_metric)
-            vectorstore = indexer.index_from_existing(cfg.index_name, embeddings)
 
-            rag = RAGPipeline(vectorstore, openai_model=cfg.openai_model, system_prompt=SYSTEM_PROMPT, k=3)
-            answer = rag.answer(user_input)
-
-            st.markdown(f"**Answer:** {answer}")
-        except Exception as e:
-            st.error(str(AppException(e, sys)))
-            logger.error("Chat query failed", exc_info=True)
+# Global `app` Flask object so Docker/gunicorn still works unchanged
+web = MedicalChatbotWebApp(index_name="medi-chat")
+app = web.app
 
 if __name__ == "__main__":
-    main()
+    app.run(host="0.0.0.0", port=8080, debug=True)
