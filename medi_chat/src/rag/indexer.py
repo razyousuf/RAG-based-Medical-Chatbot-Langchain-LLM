@@ -3,10 +3,11 @@ import os
 from pinecone import Pinecone, ServerlessSpec
 from langchain_pinecone import PineconeVectorStore
 
-from src.rag.helper import DocumentProcessor, EmbeddingLoader
+from medi_chat.src.rag.docprocessor import DocumentProcessor
+from medi_chat.src.rag.embeddings_loader import EmbeddingLoader
 
-from src.utils.logger import logger
-from src.utils.exception import AppException
+from medi_chat.src.utils.logger import logger
+from medi_chat.src.utils.exception import AppException
 
 
 class MedicalIndexer:

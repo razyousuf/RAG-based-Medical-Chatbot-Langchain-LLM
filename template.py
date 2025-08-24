@@ -8,6 +8,7 @@ new_structure = [
     f"{project_name}/__init__.py",
 
     # Core utilities
+    f"{project_name}/src/__init__.py",
     f"{project_name}/src/utils/__init__.py",
     f"{project_name}/src/utils/logger.py",
     f"{project_name}/src/utils/exception.py",
@@ -15,16 +16,17 @@ new_structure = [
     # RAG logic
     f"{project_name}/src/rag/__init__.py",
     f"{project_name}/src/rag/indexer.py",
-    f"{project_name}/src/rag/helper.py",
+    f"{project_name}/src/rag/docprocessor.py",
+    f"{project_name}/src/rag/embeddings_loader.py",
     f"{project_name}/src/rag/prompt.py",
-
-    # Templates & static files
-    f"{project_name}/templates/chat.html",
-    f"{project_name}/static/style.css",
 
     # Research notebooks and data
     f"{project_name}/notebook/research_notebook.ipynb",
     f"{project_name}/data/__init__.py",
+
+    # Templates & static files
+    "templates/chat.html",
+    "static/style.css",
 
     # Root-level files
     "app.py",

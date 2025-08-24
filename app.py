@@ -1,11 +1,10 @@
-# app.py
 import os
 import sys
 from flask import Flask, render_template, request
 from dotenv import load_dotenv
 
 from medi_chat.src.rag.prompt import PromptRepository
-from medi_chat.src.rag.helper import EmbeddingLoader
+from medi_chat.src.rag.embeddings_loader import EmbeddingLoader
 
 from medi_chat.src.utils.logger import logger
 from medi_chat.src.utils.exception import AppException
@@ -52,34 +51,34 @@ class MedicalChatbotWebApp:
     # ---------- Pipeline wiring ----------
     def _wire_rag_pipeline(self):
         try:
-            logger.info("Loading HuggingFace embeddings")
+            # 1) embeddings
             self.embeddings = EmbeddingLoader.load_embeddings()
 
-            logger.info(f"Connecting to existing Pinecone index '{self.index_name}'")
+            # 2) vector store / retriever
             self.docsearch = PineconeVectorStore.from_existing_index(
                 index_name=self.index_name,
                 embedding=self.embeddings,
             )
-
             self.retriever = self.docsearch.as_retriever(
                 search_type="similarity",
-                search_kwargs={"k": 3},  # unchanged
+                search_kwargs={"k": 3},
             )
 
-            logger.info("Initializing ChatOpenAI and chains")
-            self.llm = ChatOpenAI(model="gpt-4o")  # unchanged
+            # 3) LLM
+            self.llm = ChatOpenAI(model="gpt-4o")
 
+            # 4) PROMPT — add {context} so stuff chain can inject retrieved docs
+            system_msg = PromptRepository.get_system_prompt() + "\n\nContext:\n{context}"
             self.prompt = ChatPromptTemplate.from_messages(
-                [("system", PromptRepository.get_system_prompt()), ("human", "{input}")]
+                [("system", system_msg), ("human", "{input}")]
             )
 
+            # 5) chains
             self.qa_chain = create_stuff_documents_chain(self.llm, self.prompt)
             self.rag_chain = create_retrieval_chain(self.retriever, self.qa_chain)
-
-            logger.info("RAG pipeline ready")
         except Exception as e:
-            logger.exception("Failed to wire RAG pipeline")
             raise AppException(e, sys)
+
 
     # ---------- Routes ----------
     def _register_routes(self):
